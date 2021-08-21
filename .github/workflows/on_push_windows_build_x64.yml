@@ -1,0 +1,27 @@
+name: windows-build-x64
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.x
+      
+    - name: Publish
+      run: dotnet publish --self-contained -r "win10-x64" -c Release -o TextFilesFormatAnalyzer /p:TrimUnusedDependencies=true -p:PublishSingleFile=true
+      
+    - uses: actions/upload-artifact@v2
+      with:
+        name: TextFilesFormatAnalyzer-win10-x64
+        path: ./TextFilesFormatAnalyzer
