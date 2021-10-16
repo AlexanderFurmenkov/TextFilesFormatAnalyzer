@@ -87,7 +87,7 @@ namespace TextFilesFormatAnalizer
         {
             return m_options.Report;
         }
-        private Report GetReport(ArrayList files)
+        private Report CreateReport()
         {
             var report = new Report
             {
@@ -96,15 +96,18 @@ namespace TextFilesFormatAnalizer
 
             if (m_options.Statistics)
             {
-                report.Statistics = new Dictionary<string, Dictionary<string, int>>();
+                report.StatisticsByProcessor = new Dictionary<string, Statistics>();
             }
-
+            return report;
+        }
+        private Report GetReport(ArrayList files)
+        {
+            var report = CreateReport();
             foreach (var file in files)
             {
                 FileRecord file_record = GetFileDataAndCalculateStatisticsIfNeeded(report, file);
                 report.FilesRecords.Add(file_record);
             }
-
             return report;
         }
 
@@ -115,35 +118,20 @@ namespace TextFilesFormatAnalizer
                 File = file.ToString(),
                 Records = new Dictionary<string, Dictionary<string, string>>()
             };
-            bool have_statistics = report.Statistics != null;
-
+            bool have_statistics = report.StatisticsByProcessor != null;
             foreach (var task in m_initialized_tasks)
             {
                 var task_name = task.Name();
+                var result = task.Execute(file.ToString());
+                var path_to_file = Path.GetDirectoryName((string)file);
+
                 if (have_statistics)
                 {
-                    if (!report.Statistics.ContainsKey(task_name))
+                    CreateStatisticsRecord(report, have_statistics, task_name);
+                    foreach (var key_value in result)
                     {
-                        report.Statistics[task_name] = new Dictionary<string, int>();
-                    }
-                }
-
-                var result = task.Execute(file.ToString());
-                foreach (var key_value in result)
-                {
-                    if (key_value.Key != "Value")
-                        continue;
-
-                    if (have_statistics)
-                    {
-                        if (!report.Statistics[task_name].ContainsKey(key_value.Value))
-                        {
-                            report.Statistics[task_name].Add(key_value.Value, 1);
-                        }
-                        else
-                        {
-                            report.Statistics[task_name][key_value.Value] += 1;
-                        }
+                        if (key_value.Key == "Value")
+                            CalculateStatistics(report, task_name, path_to_file, key_value);
                     }
                 }
 
@@ -151,6 +139,43 @@ namespace TextFilesFormatAnalizer
             }
 
             return file_record;
+
+            static void CreateStatisticsRecord(Report report, bool have_statistics, string task_name)
+            {
+                report.StatisticsByProcessor.Add(task_name, new Statistics());
+                report.StatisticsByProcessor[task_name].Common = new Dictionary<string, int>();
+                report.StatisticsByProcessor[task_name].ByPath = new Dictionary<string, Dictionary<string, int>>();
+            }
+
+            static void CalculateStatistics(Report report, string task_name, string path_to_file, KeyValuePair<string, string> key_value)
+            {
+                if (!report.StatisticsByProcessor[task_name].Common.ContainsKey(key_value.Value))
+                {
+                    report.StatisticsByProcessor[task_name].Common.Add(key_value.Value, 1);
+                }
+                else
+                {
+                    report.StatisticsByProcessor[task_name].Common[key_value.Value] += 1;
+                }
+
+                if (!report.StatisticsByProcessor[task_name].ByPath.ContainsKey(key_value.Value))
+                {
+                    var record = new Dictionary<string, int>();
+                    record.Add(path_to_file, 1);
+                    report.StatisticsByProcessor[task_name].ByPath.Add(key_value.Value, record);
+                }
+                else
+                {
+                    if (!report.StatisticsByProcessor[task_name].ByPath[key_value.Value].ContainsKey(path_to_file))
+                    {
+                        report.StatisticsByProcessor[task_name].ByPath[key_value.Value].Add(path_to_file, 1);
+                    }
+                    else
+                    {
+                        report.StatisticsByProcessor[task_name].ByPath[key_value.Value][path_to_file] += 1;
+                    }
+                }
+            }
         }
 
         private static void GenerateJsonReport(string report_path, Report report)
@@ -169,13 +194,21 @@ namespace TextFilesFormatAnalizer
             public Dictionary<string, Dictionary<string, string>> Records { get; set; }
         }
 
+        private class Statistics
+        {
+            [DataMember]
+            public Dictionary<string, int> Common { get; set; }
+            [DataMember]
+            public Dictionary<string, Dictionary<string, int>> ByPath { get; set; }
+        }
+
         [DataContract]
         private class Report
         {
             [DataMember]
             public List<FileRecord> FilesRecords { get; set; }
             [DataMember]
-            public Dictionary<string, Dictionary<string, int>> Statistics { get; set; }
+            public Dictionary<string, Statistics> StatisticsByProcessor { get; set; }
         }
 
         private readonly List<IFileTask> m_initialized_tasks;
