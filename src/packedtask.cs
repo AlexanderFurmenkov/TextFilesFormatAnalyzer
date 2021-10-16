@@ -142,9 +142,12 @@ namespace TextFilesFormatAnalizer
 
             static void CreateStatisticsRecord(Report report, bool have_statistics, string task_name)
             {
-                report.StatisticsByProcessor.Add(task_name, new Statistics());
-                report.StatisticsByProcessor[task_name].Common = new Dictionary<string, int>();
-                report.StatisticsByProcessor[task_name].ByPath = new Dictionary<string, Dictionary<string, int>>();
+                if (!report.StatisticsByProcessor.ContainsKey(task_name)) // todo:
+                {
+                    report.StatisticsByProcessor.Add(task_name, new Statistics());
+                    report.StatisticsByProcessor[task_name].Common = new Dictionary<string, int>();
+                    report.StatisticsByProcessor[task_name].ByPath = new Dictionary<string, Dictionary<string, int>>();
+                }
             }
 
             static void CalculateStatistics(Report report, string task_name, string path_to_file, KeyValuePair<string, string> key_value)
